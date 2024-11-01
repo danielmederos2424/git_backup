@@ -35,7 +35,7 @@ This Python script provides an automated solution for backing up all repositorie
 
 ## Configuration
 
-Configure the script using environment variables:
+Configure the script using environment variables (create a .env file with the following content):
 
 - `GITHUB_TOKEN`: Your GitHub Personal Access Token
 - `GITHUB_ORG`: Your GitHub Organization name

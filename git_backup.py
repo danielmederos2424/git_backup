@@ -68,7 +68,7 @@ def clone_repo(repo_url, destination_dir, token):
         result = os.system(f"git clone --quiet {auth_url} {destination_dir}")
         
         if result == 0:
-            print(f"Repository cloned successfully")
+            print(f"Repository cloned successfully to {destination_dir}")
         else:
             print(f"Error: Git clone failed with exit code: {result}")
             
@@ -116,6 +116,8 @@ def main():
         
         date_backup_dir = os.path.join(backup_dir, backup_date)
         os.makedirs(date_backup_dir, exist_ok=True)
+        
+        print(f"\nBacking up repositories to: {date_backup_dir}\n")
         
         for repo in repos:
             repo_url = repo['clone_url']

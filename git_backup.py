@@ -9,7 +9,6 @@ if not load_dotenv():
     print("Warning: .env file not found. Using system environment variables.")
 
 def validate_environment():
-    """Validate required environment variables."""
     required_vars = {
         "GITHUB_TOKEN": os.getenv("GITHUB_TOKEN"),
         "GITHUB_ORG": os.getenv("GITHUB_ORG"),
@@ -22,17 +21,11 @@ def validate_environment():
         print("Error: Missing required environment variables:")
         for var in missing_vars:
             print(f"- {var}")
-        print("\nPlease set these variables in your .env file or environment.")
-        print("Example .env file contents:")
-        print("GITHUB_TOKEN=your_github_token_here")
-        print("GITHUB_ORG=your_organization_name")
-        print("BACKUP_DIR=/path/to/backup/directory")
         sys.exit(1)
     
     return required_vars
 
 def get_github_repos(token, org_name):
-    """Fetch repositories for a given GitHub organization."""
     repos = []
     page = 1
     
@@ -41,7 +34,7 @@ def get_github_repos(token, org_name):
     while True:
         url = f"https://api.github.com/orgs/{org_name}/repos"
         headers = {
-            "Authorization": f"Bearer {token}", 
+            "Authorization": f"Bearer {token}",
             "Accept": "application/vnd.github.v3+json"
         }
         params = {
@@ -51,7 +44,7 @@ def get_github_repos(token, org_name):
         
         try:
             response = requests.get(url, headers=headers, params=params)
-            response.raise_for_status() 
+            response.raise_for_status()
             
             page_repos = response.json()
             if not page_repos:
@@ -62,65 +55,41 @@ def get_github_repos(token, org_name):
             page += 1
             
         except requests.exceptions.RequestException as e:
-            print(f"\nError fetching repositories:")
-            print(f"Status code: {response.status_code}")
-            print(f"Error message: {response.text}")
-            print(f"Exception: {str(e)}")
+            print(f"\nError fetching repositories: {str(e)}")
             sys.exit(1)
     
     print(f"Total repositories found: {len(repos)}")
     return repos
 
-def clone_repo(repo_url, destination_dir):
-    """Clones a GitHub repository to a local directory."""
+def clone_repo(repo_url, destination_dir, token):
     print(f"\nCloning repository: {repo_url}")
     try:
-
-        if os.path.exists(destination_dir):
-            print(f"Directory already exists: {destination_dir}")
-            print("Removing existing directory...")
-            shutil.rmtree(destination_dir)
-        
-        os.makedirs(destination_dir, exist_ok=True)
-        result = os.system(f"git clone --quiet {repo_url} {destination_dir}")
+        auth_url = repo_url.replace("https://", f"https://oauth2:{token}@")
+        result = os.system(f"git clone --quiet {auth_url} {destination_dir}")
         
         if result == 0:
-            print(f"Repository cloned successfully to: {destination_dir}")
+            print(f"Repository cloned successfully")
         else:
-            print(f"Error: Git clone command failed with exit code: {result}")
+            print(f"Error: Git clone failed with exit code: {result}")
             
     except Exception as e:
         print(f"Error cloning repository: {str(e)}")
         raise
 
 def delete_old_backups(backup_dir):
-    """Deletes old backups, keeping only the latest two."""
     print(f"\nChecking for old backups in: {backup_dir}")
     try:
         if not os.path.exists(backup_dir):
-            print("Backup directory does not exist. Skipping cleanup.")
             return
             
-        backups = []
-
-        for repo_dir in os.listdir(backup_dir):
-            repo_path = os.path.join(backup_dir, repo_dir)
-            if os.path.isdir(repo_path):
-                for date_dir in os.listdir(repo_path):
-                    full_path = os.path.join(repo_path, date_dir)
-                    if os.path.isdir(full_path):
-                        backups.append((full_path, os.path.getmtime(full_path)))
+        backup_dates = [d for d in os.listdir(backup_dir) if os.path.isdir(os.path.join(backup_dir, d))]
+        backup_dates.sort(reverse=True)
         
-
-        backups.sort(key=lambda x: x[1], reverse=True)
-        
-        if len(backups) > 2:
-            print(f"Found {len(backups)} backups. Keeping the latest 2.")
-            for backup_path, _ in backups[2:]:
-                print(f"Deleting old backup: {backup_path}")
-                shutil.rmtree(backup_path)
-        else:
-            print(f"Found {len(backups)} backups. No cleanup needed.")
+        if len(backup_dates) > 2:
+            for old_date in backup_dates[2:]:
+                old_path = os.path.join(backup_dir, old_date)
+                print(f"Deleting old backup: {old_path}")
+                shutil.rmtree(old_path)
             
     except Exception as e:
         print(f"Error during backup cleanup: {str(e)}")
@@ -128,7 +97,6 @@ def delete_old_backups(backup_dir):
 
 def main():
     print("Starting GitHub Organization Backup Script")
-    print("=========================================")
     
     env_vars = validate_environment()
     token = env_vars["GITHUB_TOKEN"]
@@ -137,7 +105,7 @@ def main():
     
     today = datetime.date.today()
     start_of_week = today - datetime.timedelta(days=today.weekday())
-    print(f"\nBackup date: {start_of_week.strftime('%Y-%m-%d')}")
+    backup_date = start_of_week.strftime("%Y-%m-%d")
     
     try:
         repos = get_github_repos(token, org_name)
@@ -146,18 +114,18 @@ def main():
             print("No repositories found. Exiting.")
             return
         
-        os.makedirs(backup_dir, exist_ok=True)
+        date_backup_dir = os.path.join(backup_dir, backup_date)
+        os.makedirs(date_backup_dir, exist_ok=True)
         
         for repo in repos:
             repo_url = repo['clone_url']
             repo_name = repo['name']
-            backup_path = os.path.join(
-                backup_dir, 
-                repo_name, 
-                start_of_week.strftime("%Y-%m-%d")
-            )
+            repo_backup_path = os.path.join(date_backup_dir, repo_name)
             
-            clone_repo(repo_url, backup_path)
+            if os.path.exists(repo_backup_path):
+                shutil.rmtree(repo_backup_path)
+            
+            clone_repo(repo_url, repo_backup_path, token)
         
         delete_old_backups(backup_dir)
         
